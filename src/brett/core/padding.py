@@ -1,12 +1,26 @@
-"""Motor de análisis de alineación y optimización de padding en BRETT."""
+"""Motor de análisis de alineación y optimización de padding en BRETT usando Tree-Sitter AST."""
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import tree_sitter_c as tsc
+from tree_sitter import Language, Parser, Node
+
 from brett.core.models import CampoStruct, ReportePadding, StructInfo
+
+_C_LANGUAGE: Optional[Language] = None
+_PARSER: Optional[Parser] = None
+
+
+def get_c_parser() -> Parser:
+    global _C_LANGUAGE, _PARSER
+    if _PARSER is None:
+        _C_LANGUAGE = Language(tsc.language())
+        _PARSER = Parser(_C_LANGUAGE)
+    return _PARSER
+
 
 # Tamaños y alineaciones estándar en x86_64
 TIPO_INFO: Dict[str, Tuple[int, int]] = {
@@ -40,50 +54,67 @@ def _obtener_tamanio_alineacion(tipo: str) -> Tuple[int, int]:
     return (4, 4)  # Fallback estándar
 
 
-def analizar_struct(nombre: str, cuerpo: str, archivo: Path, linea: int) -> StructInfo:
-    """Analiza los campos de un struct, calcula el padding y sugiere el orden óptimo."""
+def _find_identifier(node: Node) -> Optional[str]:
+    if node.type in ("identifier", "type_identifier", "field_identifier"):
+        return node.text.decode("utf-8", errors="replace")
+    for child in node.children:
+        if child.type in ("identifier", "type_identifier", "field_identifier"):
+            return child.text.decode("utf-8", errors="replace")
+        elif child.type in ("pointer_declarator", "array_declarator", "parenthesized_declarator"):
+            res = _find_identifier(child)
+            if res:
+                return res
+    return None
+
+
+def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> Optional[StructInfo]:
+    """Analiza los campos de un nodo struct AST, calcula el padding y sugiere el orden óptimo."""
+    body_node = node.child_by_field_name("body")
+    if not body_node:
+        return None
+
     campos: List[CampoStruct] = []
-    lineas = cuerpo.splitlines()
-
-    re_campo = re.compile(r"^\s*([a-zA-Z0-9_* ]+?)\s+([a-zA-Z0-9_]+)\s*;")
-
     offset = 0
     max_align = 1
     tamanio_datos = 0
 
-    for l in lineas:
-        m = re_campo.search(l)
-        if m:
-            tipo_raw = m.group(1).strip()
-            nombre_campo = m.group(2).strip()
+    for f in body_node.children:
+        if f.type == "field_declaration":
+            type_node = f.child_by_field_name("type")
+            decl_node = f.child_by_field_name("declarator")
+            if not decl_node and len(f.children) >= 2:
+                decl_node = f.children[1]
 
-            tam, align = _obtener_tamanio_alineacion(tipo_raw)
-            if align > max_align:
-                max_align = align
+            if type_node and decl_node:
+                tipo_raw = type_node.text.decode("utf-8", errors="replace").strip()
+                nombre_campo = _find_identifier(decl_node) or "campo"
+                if "*" in decl_node.text.decode("utf-8", errors="replace"):
+                    tipo_raw += " *"
 
-            # Alinear offset al múltiplo de 'align'
-            if offset % align != 0:
-                offset += align - (offset % align)
+                tam, align = _obtener_tamanio_alineacion(tipo_raw)
+                if align > max_align:
+                    max_align = align
 
-            campos.append(CampoStruct(
-                tipo=tipo_raw,
-                nombre=nombre_campo,
-                tamanio=tam,
-                alineacion=align,
-                offset_original=offset,
-            ))
+                if offset % align != 0:
+                    offset += align - (offset % align)
 
-            offset += tam
-            tamanio_datos += tam
+                campos.append(CampoStruct(
+                    tipo=tipo_raw,
+                    nombre=nombre_campo,
+                    tamanio=tam,
+                    alineacion=align,
+                    offset_original=offset,
+                ))
 
-    # Alinear tamaño total del struct al múltiplo del miembro con mayor alineación
+                offset += tam
+                tamanio_datos += tam
+
     tamanio_total = offset
     if max_align > 0 and tamanio_total % max_align != 0:
         tamanio_total += max_align - (tamanio_total % max_align)
 
     padding_desperdiciado = tamanio_total - tamanio_datos
 
-    # Calcular orden optimizado: ordenar campos por alineación descendente
     campos_opt = sorted(campos, key=lambda c: c.alineacion, reverse=True)
     offset_opt = 0
     for c in campos_opt:
@@ -98,7 +129,6 @@ def analizar_struct(nombre: str, cuerpo: str, archivo: Path, linea: int) -> Stru
 
     bytes_ahorrados = max(0, tamanio_total - tamanio_opt)
 
-    # Generar código sugerido optimizado
     codigo_opt = f"typedef struct {{\n"
     for c in campos_opt:
         codigo_opt += f"    {c.tipo} {c.nombre};  // {c.tamanio} B (offset {c.offset_optimizado})\n"
@@ -119,22 +149,43 @@ def analizar_struct(nombre: str, cuerpo: str, archivo: Path, linea: int) -> Stru
 
 
 def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
-    """Extrae y audita todas las estructuras definidas en un archivo C o H."""
+    """Extrae y audita todas las estructuras definidas en un archivo C o H usando Tree-Sitter AST."""
     archivo = Path(archivo)
     if not archivo.is_file():
         return []
 
     contenido = archivo.read_text(encoding="utf-8", errors="ignore")
-    re_struct = re.compile(r"typedef\s+struct\s*(?:[a-zA-Z0-9_]*)\s*\{([^}]+)\}\s*([a-zA-Z0-9_]+)\s*;", re.MULTILINE)
+    source_bytes = contenido.encode("utf-8")
+    parser = get_c_parser()
+    tree = parser.parse(source_bytes)
 
-    structs = []
-    for m in re_struct.finditer(contenido):
-        cuerpo = m.group(1)
-        nombre = m.group(2)
-        linea = contenido[:m.start()].count("\n") + 1
-        s_info = analizar_struct(nombre, cuerpo, archivo, linea)
-        structs.append(s_info)
+    structs: List[StructInfo] = []
 
+    def _traverse(node: Node) -> None:
+        if node.type == "type_definition":
+            type_node = node.child_by_field_name("type")
+            decl_node = node.child_by_field_name("declarator")
+            nombre = _find_identifier(decl_node) if decl_node else "AnonStruct"
+            if type_node and type_node.type == "struct_specifier":
+                linea = node.start_point.row + 1
+                s_info = analizar_struct_node(type_node, nombre, archivo, linea)
+                if s_info:
+                    structs.append(s_info)
+                return
+
+        elif node.type == "struct_specifier" and node.parent and node.parent.type == "declaration":
+            name_node = node.child_by_field_name("name")
+            nombre = name_node.text.decode("utf-8", errors="replace") if name_node else "struct_anon"
+            linea = node.start_point.row + 1
+            s_info = analizar_struct_node(node, nombre, archivo, linea)
+            if s_info:
+                structs.append(s_info)
+            return
+
+        for child in node.children:
+            _traverse(child)
+
+    _traverse(tree.root_node)
     return structs
 
 
