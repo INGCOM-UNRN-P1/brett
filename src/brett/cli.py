@@ -46,13 +46,41 @@ def main_callback(
     pass
 
 
+def generar_seccion_markdown(reporte) -> str:
+    """Genera sección de auditoría de padding y estructuras para Dredd."""
+    lines = ["## Auditoría de Padding y Structs (Brett)\n"]
+    lines.append(f"- **Structs analizados:** {len(reporte.structs)}")
+    lines.append(f"- **Padding total desperdiciado:** {reporte.total_bytes_desperdiciados} B")
+    lines.append(f"- **Bytes ahorrables:** {reporte.total_bytes_ahorrables} B\n")
+    if not reporte.structs:
+        lines.append("> [!NOTE]\n> No se encontraron declaraciones de estructuras (`struct`) en los archivos analizados.\n")
+    elif reporte.total_bytes_ahorrables == 0:
+        lines.append("> [!TIP]\n> **Alineación Óptima:** Las estructuras analizadas no presentan desperdicio de memoria por padding innecesario.\n")
+    else:
+        lines.append("| Estructura | Ubicación | Tamaño Actual | Útil | Padding | Optimizado | Ahorro Potencial |")
+        lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: |")
+        for s in reporte.structs:
+            ahorro_str = f"**-{s.bytes_ahorrados} B**" if s.bytes_ahorrados > 0 else "0 B"
+            lines.append(f"| `{s.nombre}` | `{s.archivo.name}:{s.linea}` | {s.tamanio_total_bytes} B | {s.tamanio_datos_utiles_bytes} B | {s.bytes_padding_desperdiciados} B | {s.tamanio_optimizado_bytes} B | {ahorro_str} |")
+        lines.append("")
+    return "\n".join(lines)
+
+
 @app.command("audit")
 def audit_cmd(
     rutas: List[Path] = typer.Argument(..., help="Archivos C/H o directorios a auditar."),
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en JSON."),
+    output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
 ) -> None:
     """Audita estructuras en busca de bytes de memoria desperdiciados por desalineación y padding."""
     reporte = auditar_rutas(rutas)
+
+    if output_md:
+        md_text = generar_seccion_markdown(reporte)
+        output_md.parent.mkdir(parents=True, exist_ok=True)
+        output_md.write_text(md_text, encoding="utf-8")
+        console.print(f"[green]✓ Sección Markdown generada en:[/green] [cyan]{output_md}[/cyan]")
+        raise typer.Exit(code=0)
 
     if json_output:
         print(json.dumps(reporte.to_dict(), indent=2, ensure_ascii=False))
@@ -93,6 +121,22 @@ def audit_cmd(
         title="Resumen de Padding",
         border_style=color,
     ))
+
+
+@app.command("report")
+def report_cmd(
+    rutas: List[Path] = typer.Argument(..., help="Archivos C/H o directorios a auditar."),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Ruta de destino del archivo Markdown."),
+) -> None:
+    """Genera directamente la sección de reporte Markdown de BRETT para Dredd."""
+    reporte = auditar_rutas(rutas)
+    md_content = generar_seccion_markdown(reporte)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(md_content, encoding="utf-8")
+        console.print(f"[green]✓ Reporte Markdown generado en:[/green] [cyan]{output}[/cyan]")
+    else:
+        print(md_content)
 
 
 @app.command("optimize")
