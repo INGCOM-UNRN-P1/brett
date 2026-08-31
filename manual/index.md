@@ -351,3 +351,12 @@ Podés encadenar `brett` con otras herramientas del ecosistema en una única lí
 brett optimize include/tda.h --in-place && gaff format include/tda.h
 ````
 
+---
+
+(manual-brett-seccion-plugins)=
+## 9. Extensión, Desarrollo de Plugins y API Python
+
+Para crear tus propias reglas, conectores de evaluación o integrar `brett` programáticamente en pipelines de CI/CD:
+
+- 👉 **Consultá la guía completa:** [Guía de Extensión y Creación de Plugins](plugins.md)
+
