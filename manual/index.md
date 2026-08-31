@@ -179,3 +179,54 @@ check-brett:
 ````
 
 Ejecutá `make check-brett` antes de cada commit para asegurar que tu código conserve el estado de aprobación.
+
+---
+
+(manual-brett-arquitectura)=
+## 7. Arquitectura Interna y Mecanismo Técnico
+
+La herramienta **`brett`** implementa un motor de alta precisión basado en:
+
+- **Tecnología Núcleo:** `libclang / C-Parser AST + ABI Memory Layout Calculator (x86_64 / ARM64 / ILP32)`.
+- **Aislamiento y Determinismo:** Diseñada para operar sin efectos colaterales en entornos de integración continua (CI), terminales de estudiantes y servidores docentes headless.
+- **Manejo de Errores Pedagógico:** Todo fallo de sintaxis, memoria o lógica se traduce en una acción prescriptiva concreta con su respectiva justificación técnica.
+
+---
+
+(manual-brett-ecosistema)=
+## 8. Integración y Conexión con el Ecosistema
+
+````{note}
+Ninguna herramienta opera de forma aislada. **`brett`** forma parte del pipeline integral de evaluación, verificación y enseñanza de la cátedra.
+````
+
+### Diagrama de Flujo e Interoperabilidad
+
+````{mermaid}
+graph TD
+    SRC[Headers C: Structs] --> BRT[Brett: Auditor de Padding]
+    BRT -->|Cálculo de Desperdicio| ABI[Modelo de Memoria 64/32-bit]
+    BRT -->|Struct Reordenada| GAFF[Gaff: Formateo y Estilo]
+    BRT -->|Layout Optimizado| FERRO[Ferro: Perfilador de Caché]
+    BRT -->|Esquema de Bytes| KANE[Kane: Mapeo de Archivos Binarios]
+````
+
+### Matriz de Intercambio de Datos
+
+| Canal | Herramientas Conectadas | Tipo de Datos Transferidos |
+| :--- | :--- | :--- |
+| **Entradas (Inputs)** | - `Headers C (.h) desarrollados por estudiantes o cátedra` | Código fuente, AST, binarios, testcases, contratos |
+| **Salidas (Outputs)** | - `gaff (formato Allman)`
+- `kane (mapeo de archivos binarios)`
+- `bishop (mapa de memoria)` | Informes Markdown, diagnósticos Rich, JSON, actas |
+| **Sincronización** | `ferro`, `crowe`, `kane` | Validación cruzada, flags compartidos y autofix |
+
+### Pipeline de Integración Recomendado
+
+Podés encadenar `brett` con otras herramientas del ecosistema en una única línea de comando:
+
+````{code-block} bash
+# Pipeline de integración típico
+brett optimize include/tda.h --in-place && gaff format include/tda.h
+````
+
