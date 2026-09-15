@@ -48,7 +48,10 @@ def main_callback(
 
 def generar_seccion_markdown(reporte) -> str:
     """Genera sección de auditoría de padding y estructuras para Dredd."""
-    lines = ["## Auditoría de Padding y Structs (Brett)\n"]
+    lines = [
+        "<!-- dredd-section: brett v1.0.0 -->\n",
+        "## Auditoría de Padding y Structs (Brett)\n",
+    ]
     lines.append(f"- **Structs analizados:** {len(reporte.structs)}")
     lines.append(f"- **Padding total desperdiciado:** {reporte.total_bytes_desperdiciados} B")
     lines.append(f"- **Bytes ahorrables:** {reporte.total_bytes_ahorrables} B\n")
@@ -61,7 +64,9 @@ def generar_seccion_markdown(reporte) -> str:
         lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: |")
         for s in reporte.structs:
             ahorro_str = f"**-{s.bytes_ahorrados} B**" if s.bytes_ahorrados > 0 else "0 B"
-            lines.append(f"| `{s.nombre}` | `{s.archivo.name}:{s.linea}` | {s.tamanio_total_bytes} B | {s.tamanio_datos_utiles_bytes} B | {s.bytes_padding_desperdiciados} B | {s.tamanio_optimizado_bytes} B | {ahorro_str} |")
+            nom_limpio = s.nombre.replace("|", "&#124;")
+            loc_limpio = f"{s.archivo.name}:{s.linea}".replace("|", "&#124;")
+            lines.append(f"| `{nom_limpio}` | `{loc_limpio}` | {s.tamanio_total_bytes} B | {s.tamanio_datos_utiles_bytes} B | {s.bytes_padding_desperdiciados} B | {s.tamanio_optimizado_bytes} B | {ahorro_str} |")
         lines.append("")
     return "\n".join(lines)
 

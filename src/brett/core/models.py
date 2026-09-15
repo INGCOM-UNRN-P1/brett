@@ -62,6 +62,7 @@ class ReportePadding:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "schema_version": "1.0.0",
             "total_structs": len(self.structs),
             "total_bytes_desperdiciados": self.total_bytes_desperdiciados,
             "total_bytes_ahorrables": self.total_bytes_ahorrables,
