@@ -7,11 +7,10 @@ BRETT analiza la disposición en memoria (`Memory Layout`) de tipos de datos com
 ## 🎯 Alcance
 
 ### Qué cubre
-- Auditoría estática y cálculo exhaustivo del layout de memoria de `struct` y `union` en C.
+- Auditoría estática y cálculo del layout de memoria de `typedef struct` en C.
 - Determinación de offsets de cada campo, tamaño total del tipo y requerimientos de alineación (`alignof`).
-- Identificación y cuantificación precisa de bytes de padding desperdiciados por alineación.
+- Identificación y cuantificación de bytes de padding desperdiciados por desalineación de campos.
 - Generación de propuestas de reordenamiento óptimo de campos para minimizar el consumo de memoria.
-- Generación de aserciones estáticas (`_Static_assert`) para verificación de tamaños en tiempo de compilación.
 
 ### Qué no cubre (Límites y Delegación)
 - Decodificación de archivos binarios estructurados en disco con endianness específico (delegado a `kane`).
@@ -42,6 +41,9 @@ brett audit src/ main.h
 # 2. Generar sugerencias de layout optimizado
 brett optimize tipos.h
 
-# 3. Salida estructurada JSON
+# 3. Generar reporte consolidado Markdown
+brett report src/
+
+# 4. Salida estructurada JSON
 brett audit src/ --json
 ```
