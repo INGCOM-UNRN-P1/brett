@@ -42,3 +42,15 @@ def test_cli_optimize(tmp_path):
     res = runner.invoke(app, ["optimize", str(fuente)])
     assert res.exit_code == 0
     assert "Layout Sugerido" in res.stdout
+
+
+def test_cli_doctor():
+    res = runner.invoke(app, ["doctor"])
+    assert res.exit_code == 0
+    assert "doctor" in res.stdout.lower()
+
+    res_json = runner.invoke(app, ["doctor", "--json"])
+    assert res_json.exit_code == 0
+    data = json.loads(res_json.stdout)
+    assert data["herramienta"] == "brett"
+    assert data["ok"] is True
