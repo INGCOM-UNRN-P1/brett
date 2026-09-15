@@ -41,3 +41,13 @@ def test_struct_ya_optimizado(tmp_path):
     s = structs[0]
     assert s.tamanio_total_bytes == 16
     assert s.bytes_ahorrados == 0
+
+
+def test_brett_d0201_corpus_real_sin_segfault():
+    """Verifica que auditar archivos complejos del corpus no arroje SIGSEGV (BRETT-D0201)."""
+    corpus_file = Path(__file__).resolve().parents[2] / "librerias" / "lib_test" / "include" / "p1_test.h"
+    if corpus_file.is_file():
+        structs = analizar_archivo_c(corpus_file)
+        assert isinstance(structs, list)
+        assert len(structs) > 0
+

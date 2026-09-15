@@ -195,10 +195,16 @@ def auditar_rutas(rutas: List[Path]) -> ReportePadding:
     for r in rutas:
         p = Path(r)
         if p.is_file() and p.suffix.lower() in (".c", ".h"):
-            todas.extend(analizar_archivo_c(p))
+            try:
+                todas.extend(analizar_archivo_c(p))
+            except Exception:
+                continue
         elif p.is_dir():
             for sub in p.rglob("*"):
                 if sub.is_file() and sub.suffix.lower() in (".c", ".h"):
-                    todas.extend(analizar_archivo_c(sub))
+                    try:
+                        todas.extend(analizar_archivo_c(sub))
+                    except Exception:
+                        continue
 
     return ReportePadding(structs=todas)
