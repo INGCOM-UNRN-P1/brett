@@ -16,6 +16,18 @@ class CampoStruct:
     alineacion: int
     offset_original: int
     offset_optimizado: int = 0
+    # Sufijo de declarador de arreglo tal como aparece en el fuente ("[10]",
+    # "[3][4]"); se preserva al emitir el código reordenado para no cambiar la
+    # semántica del programa del estudiante.
+    sufijo_array: str = ""
+    # True cuando alguna dimensión no es un literal entero (p. ej. `int v[MAX]`)
+    # y por lo tanto el tamaño del campo no se puede calcular con exactitud.
+    dimension_no_resuelta: bool = False
+
+    @property
+    def declaracion(self) -> str:
+        """Declaración del campo tal como debe emitirse en C."""
+        return f"{self.tipo} {self.nombre}{self.sufijo_array}"
 
 
 @dataclass
@@ -32,6 +44,11 @@ class StructInfo:
     bytes_ahorrados: int = 0
     codigo_optimizado: str = ""
 
+    @property
+    def tiene_dimensiones_no_resueltas(self) -> bool:
+        """True si algún campo es un arreglo de dimensión no literal."""
+        return any(c.dimension_no_resuelta for c in self.campos)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "nombre": self.nombre,
@@ -44,6 +61,7 @@ class StructInfo:
             "tamanio_optimizado_bytes": self.tamanio_optimizado_bytes,
             "bytes_ahorrados": self.bytes_ahorrados,
             "codigo_optimizado": self.codigo_optimizado,
+            "dimensiones_no_resueltas": self.tiene_dimensiones_no_resueltas,
         }
 
 

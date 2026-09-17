@@ -54,6 +54,51 @@ def _obtener_tamanio_alineacion(tipo: str) -> Tuple[int, int]:
     return (4, 4)  # Fallback estándar
 
 
+def _analizar_dimensiones_array(decl_node: Node) -> Tuple[int, str, bool]:
+    """Recorre los `array_declarator` anidados de un declarador de campo.
+
+    Devuelve (cantidad_de_elementos, sufijo_en_C, hay_dimension_no_resuelta).
+    Para un campo escalar devuelve (1, "", False). Las dimensiones se recorren
+    de afuera hacia adentro (`int m[3][4]` expone primero el 4), por eso el
+    sufijo se arma invirtiendo lo recolectado.
+    """
+    dimensiones: List[str] = []
+    elementos = 1
+    no_resuelta = False
+
+    actual: Optional[Node] = decl_node
+    while actual is not None:
+        if actual.type == "parenthesized_declarator":
+            # `char (*pa)[4]` — puntero a arreglo: las dimensiones pertenecen al
+            # apuntado, no al campo. El campo ocupa un puntero y no se multiplica.
+            sufijo_fuente = "".join(f"[{d}]" for d in reversed(dimensiones))
+            return 1, sufijo_fuente, False
+
+        if actual.type == "array_declarator":
+            size_node = actual.child_by_field_name("size")
+            if size_node is None:
+                # `int v[]` — miembro flexible: no aporta bytes al sizeof.
+                dimensiones.append("")
+                elementos *= 0
+            else:
+                texto = size_node.text.decode("utf-8", errors="replace").strip()
+                dimensiones.append(texto)
+                if size_node.type == "number_literal":
+                    try:
+                        elementos *= int(texto, 0)
+                    except ValueError:
+                        no_resuelta = True
+                else:
+                    # Dimensión simbólica (`int v[MAX]`): no se puede resolver sin
+                    # expandir el preprocesador; se marca en vez de asumir 1.
+                    no_resuelta = True
+
+        actual = actual.child_by_field_name("declarator")
+
+    sufijo = "".join(f"[{d}]" for d in reversed(dimensiones))
+    return elementos, sufijo, no_resuelta
+
+
 def _find_identifier(node: Node) -> Optional[str]:
     if node.type in ("identifier", "type_identifier", "field_identifier"):
         return node.text.decode("utf-8", errors="replace")
@@ -91,7 +136,12 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
                 if "*" in decl_node.text.decode("utf-8", errors="replace"):
                     tipo_raw += " *"
 
-                tam, align = _obtener_tamanio_alineacion(tipo_raw)
+                tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+                elementos, sufijo_array, dim_no_resuelta = _analizar_dimensiones_array(decl_node)
+                # Un arreglo ocupa N veces su elemento pero conserva la
+                # alineación del elemento (C11 §6.2.8).
+                tam = tam_elemento * elementos
+
                 if align > max_align:
                     max_align = align
 
@@ -104,6 +154,8 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
                     tamanio=tam,
                     alineacion=align,
                     offset_original=offset,
+                    sufijo_array=sufijo_array,
+                    dimension_no_resuelta=dim_no_resuelta,
                 ))
 
                 offset += tam
@@ -131,7 +183,8 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
 
     codigo_opt = f"typedef struct {{\n"
     for c in campos_opt:
-        codigo_opt += f"    {c.tipo} {c.nombre};  // {c.tamanio} B (offset {c.offset_optimizado})\n"
+        nota = " [dimensión no resuelta]" if c.dimension_no_resuelta else ""
+        codigo_opt += f"    {c.declaracion};  // {c.tamanio} B (offset {c.offset_optimizado}){nota}\n"
     codigo_opt += f"}} {nombre}; // Tamaño optimizado: {tamanio_opt} B (ahorro: {bytes_ahorrados} B)"
 
     return StructInfo(
