@@ -49,6 +49,19 @@ class StructInfo:
         """True si algún campo es un arreglo de dimensión no literal."""
         return any(c.dimension_no_resuelta for c in self.campos)
 
+    @property
+    def mensaje(self) -> str:
+        """Descripción del hallazgo, apta tanto para el alumno como para Ripley."""
+        if self.bytes_ahorrados > 0:
+            return (
+                f"Estructura '{self.nombre}' desperdicia {self.bytes_padding_desperdiciados} "
+                f"bytes de padding; reordenando sus campos se ahorran {self.bytes_ahorrados} bytes."
+            )
+        return (
+            f"Estructura '{self.nombre}' ya tiene un layout óptimo "
+            f"({self.bytes_padding_desperdiciados} B de padding son inevitables por alineación)."
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "nombre": self.nombre,
@@ -62,6 +75,17 @@ class StructInfo:
             "bytes_ahorrados": self.bytes_ahorrados,
             "codigo_optimizado": self.codigo_optimizado,
             "dimensiones_no_resueltas": self.tiene_dimensiones_no_resueltas,
+            # Claves del contrato de satélite de Ripley (`normalize_finding`), que
+            # sin ellas degrada el hallazgo a un mensaje vacío. `wasted_padding_bytes`
+            # lleva el ahorro reordenable —no el padding total— porque es lo que
+            # decide la severidad: el padding inevitable por alineación no es un
+            # defecto que el alumno pueda corregir.
+            "name": self.nombre,
+            "wasted_padding_bytes": self.bytes_ahorrados,
+            "message": self.mensaje,
+            "suggestion": self.codigo_optimizado if self.bytes_ahorrados > 0 else "",
+            "file_path": str(self.archivo),
+            "line_number": self.linea,
         }
 
 
@@ -78,9 +102,18 @@ class ReportePadding:
     def total_bytes_ahorrables(self) -> int:
         return sum(s.bytes_ahorrados for s in self.structs)
 
+    @property
+    def ok(self) -> bool:
+        """True si no hay padding reordenable en ninguna estructura."""
+        return self.total_bytes_ahorrables == 0
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "schema_version": "1.0.0",
+            # Ripley deriva el veredicto de `ok`/`passed`; sin estas claves asumía
+            # True y daba por aprobado un proyecto con bytes desperdiciados.
+            "ok": self.ok,
+            "passed": self.ok,
             "total_structs": len(self.structs),
             "total_bytes_desperdiciados": self.total_bytes_desperdiciados,
             "total_bytes_ahorrables": self.total_bytes_ahorrables,
