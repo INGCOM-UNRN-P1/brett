@@ -49,9 +49,23 @@ def _obtener_tamanio_alineacion(tipo: str) -> Tuple[int, int]:
     tipo_limpio = tipo.strip()
     if "*" in tipo_limpio:
         return TIPO_INFO["pointer"]
-    for k, v in TIPO_INFO.items():
-        if k in tipo_limpio:
-            return v
+
+    # Se resuelve por token exacto, no por substring: "long" es substring de
+    # "long double", así que el matching ingenuo (`if k in tipo`) le asignaba
+    # a `long double` el tamaño de `long` (8 B en vez de 16 B en x86_64).
+    # "long double" es la única combinación que no se puede resolver token a
+    # token, porque tanto "long" como "double" son, cada uno por separado,
+    # una clave válida de TIPO_INFO con el tamaño equivocado.
+    tokens = tipo_limpio.replace(",", " ").split()
+    if "long" in tokens and "double" in tokens:
+        return (16, 16)
+
+    for token in tokens:
+        if token in ("const", "volatile", "unsigned", "signed"):
+            continue
+        if token in TIPO_INFO:
+            return TIPO_INFO[token]
+
     return (4, 4)  # Fallback estándar
 
 
@@ -137,7 +151,22 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
                 if "*" in decl_node.text.decode("utf-8", errors="replace"):
                     tipo_raw += " *"
 
-                tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+                if type_node.type == "struct_specifier" and type_node.child_by_field_name("body") is not None:
+                    # Campo que es a su vez un struct (anónimo o nombrado) con
+                    # cuerpo propio: su tamaño real depende de SUS campos, no
+                    # de una tabla de tipos primitivos. Sin este caso, el
+                    # fallback genérico (4, 4) devolvía 4 B para un struct que
+                    # podía ocupar muchos más, corriendo mal todos los offsets
+                    # siguientes.
+                    interno = analizar_struct_node(type_node, f"{nombre_campo}_anidado", archivo, f.start_point.row + 1)
+                    if interno is not None:
+                        tam_elemento = interno.tamanio_total_bytes
+                        align = max((c.alineacion for c in interno.campos), default=1)
+                    else:
+                        tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+                else:
+                    tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+
                 elementos, sufijo_array, dim_no_resuelta = _analizar_dimensiones_array(decl_node)
                 # Un arreglo ocupa N veces su elemento pero conserva la
                 # alineación del elemento (C11 §6.2.8).
