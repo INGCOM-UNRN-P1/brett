@@ -9,6 +9,7 @@ import tree_sitter_c as tsc
 from tree_sitter import Language, Parser, Node
 
 from brett.core.models import CampoStruct, ReportePadding, StructInfo
+from brett.core.preprocesador import enmascarar_bloques_inactivos
 
 _C_LANGUAGE: Optional[Language] = None
 _PARSER: Optional[Parser] = None
@@ -208,6 +209,9 @@ def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
         return []
 
     contenido = archivo.read_text(encoding="utf-8", errors="ignore")
+    # El contenido de un `#if 0` no se compila: enmascararlo evita
+    # reportar hallazgos sobre código deliberadamente desactivado.
+    contenido = enmascarar_bloques_inactivos(contenido)
     source_bytes = contenido.encode("utf-8")
     parser = get_c_parser()
     tree = parser.parse(source_bytes)
