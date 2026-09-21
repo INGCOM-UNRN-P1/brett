@@ -54,3 +54,10 @@ def test_cli_doctor():
     data = json.loads(res_json.stdout)
     assert data["herramienta"] == "brett"
     assert data["ok"] is True
+
+
+def test_help_de_optimize_describe_el_orden_real():
+    """BRETT-D0403: el código ordena de mayor a menor alineación."""
+    res = runner.invoke(app, ["optimize", "--help"])
+    assert "mayor a menor" in res.stdout
+    assert "menor a mayor" not in res.stdout

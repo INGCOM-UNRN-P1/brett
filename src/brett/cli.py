@@ -148,7 +148,7 @@ def report_cmd(
 def optimize_cmd(
     archivo: Path = typer.Argument(..., help="Archivo C/H con las estructuras a optimizar."),
 ) -> None:
-    """Genera el código C optimizado reordenando los campos de menor a mayor alineación."""
+    """Genera el código C optimizado reordenando los campos de mayor a menor alineación."""
     reporte = auditar_rutas([archivo])
     if not reporte.structs:
         console.print("[yellow]No se encontraron estructuras para optimizar.[/yellow]")
