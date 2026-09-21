@@ -11,7 +11,7 @@ from brett.core.padding import auditar_rutas
 class BrettPlugin:
     """Plugin de auditoría de padding de structs para Ripley."""
 
-    name = "padding_audit"
+    name = "padding"
     version = "0.1.0"
 
     def is_available(self) -> bool:

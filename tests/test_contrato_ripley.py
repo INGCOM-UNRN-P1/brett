@@ -81,3 +81,13 @@ def test_normalize_finding_de_ripley_produce_un_hallazgo_util(tmp_path):
     bueno = normalize_finding(por_nombre["Bueno"], "padding")
     assert bueno["codigo"] == "PADDING_OPTIMAL"
     assert bueno["severidad"] == "INFO"
+
+
+def test_nombre_del_plugin_coincide_con_el_entry_point():
+    """BRETT-D0902: name debe ser el del entry-point/catálogo (`padding`)."""
+    from importlib.metadata import entry_points
+
+    from brett.ripley_plugin import BrettPlugin
+
+    nombres = {ep.name for ep in entry_points(group="ripley.plugins") if ep.value.startswith("brett.")}
+    assert BrettPlugin.name in nombres
