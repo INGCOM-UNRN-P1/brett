@@ -61,3 +61,18 @@ def test_help_de_optimize_describe_el_orden_real():
     res = runner.invoke(app, ["optimize", "--help"])
     assert "mayor a menor" in res.stdout
     assert "menor a mayor" not in res.stdout
+
+
+def test_exit_code_refleja_el_padding_reordenable(tmp_path):
+    """BRETT-D0402: audit/report salen 1 si hay ahorro reordenable, 0 si no."""
+    malo = tmp_path / "malo.h"
+    malo.write_text("typedef struct { char a; double b; char c; } Malo;", encoding="utf-8")
+    bueno = tmp_path / "bueno.h"
+    bueno.write_text("typedef struct { double b; char a; char c; } Bueno;", encoding="utf-8")
+
+    for extra in ([], ["--json"], ["--md", str(tmp_path / "o.md")]):
+        assert runner.invoke(app, ["audit", str(malo), *extra]).exit_code == 1, extra
+        assert runner.invoke(app, ["audit", str(bueno), *extra]).exit_code == 0, extra
+    assert runner.invoke(app, ["report", str(malo)]).exit_code == 1
+    assert runner.invoke(app, ["report", str(bueno)]).exit_code == 0
+    assert json.loads(runner.invoke(app, ["audit", str(malo), "--json"]).stdout)["passed"] is False

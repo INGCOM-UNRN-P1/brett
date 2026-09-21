@@ -46,6 +46,11 @@ def main_callback(
     pass
 
 
+def _codigo_salida(reporte) -> int:
+    """0 si no hay padding reordenable (`reporte.ok`); 1 si lo hay (ahorro > 0 B)."""
+    return 0 if reporte.ok else 1
+
+
 def generar_seccion_markdown(reporte) -> str:
     """Genera sección de auditoría de padding y estructuras para Dredd."""
     lines = [
@@ -85,11 +90,11 @@ def audit_cmd(
         output_md.parent.mkdir(parents=True, exist_ok=True)
         output_md.write_text(md_text, encoding="utf-8")
         console.print(f"[green]✓ Sección Markdown generada en:[/green] [cyan]{output_md}[/cyan]")
-        raise typer.Exit(code=0)
+        raise typer.Exit(code=_codigo_salida(reporte))
 
     if json_output:
         print(json.dumps(reporte.to_dict(), indent=2, ensure_ascii=False))
-        raise typer.Exit(code=0)
+        raise typer.Exit(code=_codigo_salida(reporte))
 
     if not reporte.structs:
         console.print("[green]No se encontraron declaraciones de 'typedef struct' en los archivos analizados.[/green]")
@@ -126,6 +131,7 @@ def audit_cmd(
         title="Resumen de Padding",
         border_style=color,
     ))
+    raise typer.Exit(code=_codigo_salida(reporte))
 
 
 @app.command("report")
@@ -142,6 +148,7 @@ def report_cmd(
         console.print(f"[green]✓ Reporte Markdown generado en:[/green] [cyan]{output}[/cyan]")
     else:
         print(md_content)
+    raise typer.Exit(code=_codigo_salida(reporte))
 
 
 @app.command("optimize")
