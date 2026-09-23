@@ -53,8 +53,9 @@ def _codigo_salida(reporte) -> int:
 
 def generar_seccion_markdown(reporte) -> str:
     """Genera sección de auditoría de padding y estructuras para Dredd."""
+    status = "ok" if reporte.ok else "fail"
     lines = [
-        "<!-- dredd-section: brett v1.0.0 -->\n",
+        f"<!-- dredd-section: brett, tool=brett, version=1.0.0, status={status} -->\n",
         "## Auditoría de Padding y Structs (Brett)\n",
     ]
     lines.append(f"- **Structs analizados:** {len(reporte.structs)}")
