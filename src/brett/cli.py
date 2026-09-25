@@ -19,6 +19,7 @@ console = Console()
 err_console = Console(stderr=True)
 
 app = typer.Typer(
+    context_settings={"help_option_names": ["-h", "--help"]},
     name="brett",
     help="📏 BRETT — Auditor de alineación y padding de estructuras C y optimizador de reordenamiento de campos.",
     add_completion=True,
