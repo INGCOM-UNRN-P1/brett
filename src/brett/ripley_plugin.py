@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
+from brett import __version__
 from brett.core.padding import auditar_rutas
 
 
@@ -12,7 +13,7 @@ class BrettPlugin:
     """Plugin de auditoría de padding de structs para Ripley."""
 
     name = "padding"
-    version = "0.1.0"
+    version = __version__
 
     def is_available(self) -> bool:
         return True
