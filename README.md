@@ -49,3 +49,24 @@ brett report src/
 # 4. Salida estructurada JSON
 brett audit src/ --json
 ```
+
+<!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
+
+## Referencia rápida
+
+### Requisitos
+
+- Python ≥ 3.11 y [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+### Comandos
+
+| Comando | Descripción |
+|:--|:--|
+| `brett audit` | Audita estructuras en busca de bytes de memoria desperdiciados por desalineación y padding. |
+| `brett report` | Genera directamente la sección de reporte Markdown de BRETT para Dredd. |
+| `brett optimize` | Genera el código C optimizado reordenando los campos de mayor a menor alineación. |
+| `brett doctor` | Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC). |
+
+Ayuda de cada comando: `brett <comando> -h`.
+
+<!-- p1:referencia:fin -->
