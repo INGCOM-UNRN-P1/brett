@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from yutani.cli import crear_app
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -18,33 +19,14 @@ from brett.core.padding import auditar_rutas
 console = Console()
 err_console = Console(stderr=True)
 
-app = typer.Typer(
-    context_settings={"help_option_names": ["-h", "--help"]},
-    name="brett",
-    help="📏 BRETT — Auditor de alineación y padding de estructuras C y optimizador de reordenamiento de campos.",
+# Contrato de línea de comandos del ecosistema (-h/--help, --version/-v, errores de datos como
+# mensajes) y textos de Typer en español, desde yutani (N-ECO-14).
+app = crear_app(
+    "brett",
+    __version__,
+    "📏 BRETT — Auditor de alineación y padding de estructuras C y optimizador de reordenamiento de campos.",
     add_completion=True,
-    no_args_is_help=True,
 )
-
-
-def _version_callback(value: bool) -> None:
-    if value:
-        console.print(f"[bold cyan]BRETT[/bold cyan] versión [bold]{__version__}[/bold]")
-        raise typer.Exit(code=0)
-
-
-@app.callback()
-def main_callback(
-    version: Optional[bool] = typer.Option(
-        None,
-        "--version",
-        "-v",
-        help="Muestra la versión de BRETT.",
-        callback=_version_callback,
-        is_eager=True,
-    ),
-) -> None:
-    pass
 
 
 def _codigo_salida(reporte) -> int:
