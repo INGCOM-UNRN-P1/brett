@@ -80,7 +80,7 @@ def generar_seccion_markdown(reporte) -> str:
 
 @app.command("audit")
 def audit_cmd(
-    rutas: List[Path] = typer.Argument(..., help="Archivos C/H o directorios a auditar."),
+    rutas: List[Path] = typer.Argument(..., exists=True, help="Archivos C/H o directorios a auditar."),
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
 ) -> None:
@@ -138,7 +138,7 @@ def audit_cmd(
 
 @app.command("report")
 def report_cmd(
-    rutas: List[Path] = typer.Argument(..., help="Archivos C/H o directorios a auditar."),
+    rutas: List[Path] = typer.Argument(..., exists=True, help="Archivos C/H o directorios a auditar."),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Ruta de destino del archivo Markdown."),
 ) -> None:
     """Genera directamente la sección de reporte Markdown de BRETT para Dredd."""
@@ -155,7 +155,7 @@ def report_cmd(
 
 @app.command("optimize")
 def optimize_cmd(
-    archivo: Path = typer.Argument(..., help="Archivo C/H con las estructuras a optimizar."),
+    archivo: Path = typer.Argument(..., exists=True, help="Archivo C/H con las estructuras a optimizar."),
 ) -> None:
     """Genera el código C optimizado reordenando los campos de mayor a menor alineación."""
     reporte = auditar_rutas([archivo])
