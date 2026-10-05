@@ -29,8 +29,13 @@ app = crear_app(
 )
 
 
-def _codigo_salida(reporte) -> int:
-    """0 si no hay padding reordenable (`reporte.ok`); 1 si lo hay (ahorro > 0 B)."""
+def _codigo_salida(reporte, fail_on: Optional[int] = None) -> int:
+    """0 si no hay padding reordenable (`reporte.ok`); 1 si lo hay (ahorro > 0 B).
+
+    Con `--fail-on N`, 1 solo si reordenando se ahorrarían N bytes o más en total: para el CI de
+    una actividad que tolera un poco de relleno."""
+    if fail_on is not None:
+        return 1 if reporte.total_bytes_ahorrables >= fail_on else 0
     return 0 if reporte.ok else 1
 
 
@@ -65,6 +70,7 @@ def audit_cmd(
     rutas: List[Path] = typer.Argument(..., exists=True, help="Archivos C/H o directorios a auditar."),
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
+    fail_on: Optional[int] = typer.Option(None, "--fail-on", min=1, help="Fallar (código 1) solo si reordenando se ahorrarían N bytes o más en total."),
 ) -> None:
     """Audita estructuras en busca de bytes de memoria desperdiciados por desalineación y padding."""
     reporte = auditar_rutas(rutas)
@@ -74,11 +80,11 @@ def audit_cmd(
         output_md.parent.mkdir(parents=True, exist_ok=True)
         output_md.write_text(md_text, encoding="utf-8")
         console.print(f"[green]✓ Sección Markdown generada en:[/green] [cyan]{output_md}[/cyan]")
-        raise typer.Exit(code=_codigo_salida(reporte))
+        raise typer.Exit(code=_codigo_salida(reporte, fail_on))
 
     if json_output:
         print(json.dumps(reporte.to_dict(), indent=2, ensure_ascii=False))
-        raise typer.Exit(code=_codigo_salida(reporte))
+        raise typer.Exit(code=_codigo_salida(reporte, fail_on))
 
     if not reporte.structs:
         console.print("[green]No se encontraron declaraciones de 'typedef struct' en los archivos analizados.[/green]")
@@ -115,7 +121,7 @@ def audit_cmd(
         title="Resumen de Padding",
         border_style=color,
     ))
-    raise typer.Exit(code=_codigo_salida(reporte))
+    raise typer.Exit(code=_codigo_salida(reporte, fail_on))
 
 
 @app.command("report")

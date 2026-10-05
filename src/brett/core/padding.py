@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 import tree_sitter_c as tsc
 from tree_sitter import Language, Parser, Node
 
+from brett.core.layout import disponer
 from brett.core.models import CampoStruct, ReportePadding, StructInfo
 from brett.core.preprocesador import enmascarar_bloques_inactivos
 
@@ -127,6 +128,10 @@ def _find_identifier(node: Node) -> Optional[str]:
     return None
 
 
+def orden_optimo_campos(campos: List[CampoStruct]) -> List[CampoStruct]:
+    return sorted(campos, key=lambda c: c.alineacion, reverse=True)
+
+
 def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> Optional[StructInfo]:
     """Analiza los campos de un nodo struct AST, calcula el padding y sugiere el orden óptimo."""
     body_node = node.child_by_field_name("body")
@@ -134,8 +139,6 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
         return None
 
     campos: List[CampoStruct] = []
-    offset = 0
-    max_align = 1
     tamanio_datos = 0
 
     for f in body_node.children:
@@ -172,42 +175,32 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
                 # alineación del elemento (C11 §6.2.8).
                 tam = tam_elemento * elementos
 
-                if align > max_align:
-                    max_align = align
-
-                if offset % align != 0:
-                    offset += align - (offset % align)
-
                 campos.append(CampoStruct(
                     tipo=tipo_raw,
                     nombre=nombre_campo,
                     tamanio=tam,
                     alineacion=align,
-                    offset_original=offset,
+                    offset_original=0,
                     sufijo_array=sufijo_array,
                     dimension_no_resuelta=dim_no_resuelta,
                 ))
-
-                offset += tam
                 tamanio_datos += tam
 
-    tamanio_total = offset
-    if max_align > 0 and tamanio_total % max_align != 0:
-        tamanio_total += max_align - (tamanio_total % max_align)
+    # Los offsets y el total salen del motor de layout compartido con kane (core/layout.py).
+    elementos, tamanio_total = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos])
+    for c, e in zip(campos, (e for e in elementos if not e.es_relleno)):
+        c.offset_original = e.offset
+    if not campos:
+        tamanio_total = 0
 
     padding_desperdiciado = tamanio_total - tamanio_datos
 
-    campos_opt = sorted(campos, key=lambda c: c.alineacion, reverse=True)
-    offset_opt = 0
-    for c in campos_opt:
-        if offset_opt % c.alineacion != 0:
-            offset_opt += c.alineacion - (offset_opt % c.alineacion)
-        c.offset_optimizado = offset_opt
-        offset_opt += c.tamanio
-
-    tamanio_opt = offset_opt
-    if max_align > 0 and tamanio_opt % max_align != 0:
-        tamanio_opt += max_align - (tamanio_opt % max_align)
+    campos_opt = orden_optimo_campos(campos)
+    elementos_opt, tamanio_opt = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos_opt])
+    for c, e in zip(campos_opt, (e for e in elementos_opt if not e.es_relleno)):
+        c.offset_optimizado = e.offset
+    if not campos:
+        tamanio_opt = 0
 
     bytes_ahorrados = max(0, tamanio_total - tamanio_opt)
 

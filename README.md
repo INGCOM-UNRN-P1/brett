@@ -48,7 +48,13 @@ brett report src/
 
 # 4. Salida estructurada JSON
 brett audit src/ --json
+
+# 5. En el CI de una actividad: fallar solo si reordenando se ahorran 16 bytes o más
+brett audit src/ --fail-on 16
 ```
+
+El cálculo de offsets y relleno (`brett.core.layout.disponer`) es el único del ecosistema: kane lo
+usa para leer los registros de un archivo binario con los mismos offsets que reporta brett.
 
 <!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
 
