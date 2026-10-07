@@ -188,7 +188,7 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
 
     # Los offsets y el total salen del motor de layout compartido con kane (core/layout.py).
     elementos, tamanio_total = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos])
-    for c, e in zip(campos, (e for e in elementos if not e.es_relleno)):
+    for c, e in zip(campos, (e for e in elementos if not e.es_relleno), strict=False):
         c.offset_original = e.offset
     if not campos:
         tamanio_total = 0
@@ -197,7 +197,7 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
 
     campos_opt = orden_optimo_campos(campos)
     elementos_opt, tamanio_opt = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos_opt])
-    for c, e in zip(campos_opt, (e for e in elementos_opt if not e.es_relleno)):
+    for c, e in zip(campos_opt, (e for e in elementos_opt if not e.es_relleno), strict=False):
         c.offset_optimizado = e.offset
     if not campos:
         tamanio_opt = 0
