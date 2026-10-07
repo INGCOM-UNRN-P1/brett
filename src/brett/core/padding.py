@@ -97,7 +97,7 @@ def _analizar_dimensiones_array(decl_node: Node) -> Tuple[int, str, bool]:
                 dimensiones.append("")
                 elementos *= 0
             else:
-                texto = size_node.text.decode("utf-8", errors="replace").strip()
+                texto = (size_node.text or b"").decode("utf-8", errors="replace").strip()
                 dimensiones.append(texto)
                 if size_node.type == "number_literal":
                     try:
@@ -117,10 +117,10 @@ def _analizar_dimensiones_array(decl_node: Node) -> Tuple[int, str, bool]:
 
 def _find_identifier(node: Node) -> Optional[str]:
     if node.type in ("identifier", "type_identifier", "field_identifier"):
-        return node.text.decode("utf-8", errors="replace")
+        return (node.text or b"").decode("utf-8", errors="replace")
     for child in node.children:
         if child.type in ("identifier", "type_identifier", "field_identifier"):
-            return child.text.decode("utf-8", errors="replace")
+            return (child.text or b"").decode("utf-8", errors="replace")
         elif child.type in ("pointer_declarator", "array_declarator", "parenthesized_declarator"):
             res = _find_identifier(child)
             if res:
@@ -149,9 +149,9 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
                 decl_node = f.children[1]
 
             if type_node and decl_node:
-                tipo_raw = type_node.text.decode("utf-8", errors="replace").strip()
+                tipo_raw = (type_node.text or b"").decode("utf-8", errors="replace").strip()
                 nombre_campo = _find_identifier(decl_node) or "campo"
-                if "*" in decl_node.text.decode("utf-8", errors="replace"):
+                if "*" in (decl_node.text or b"").decode("utf-8", errors="replace"):
                     tipo_raw += " *"
 
                 if type_node.type == "struct_specifier" and type_node.child_by_field_name("body") is not None:
@@ -187,9 +187,9 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
                 tamanio_datos += tam
 
     # Los offsets y el total salen del motor de layout compartido con kane (core/layout.py).
-    elementos, tamanio_total = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos])
-    for c, e in zip(campos, (e for e in elementos if not e.es_relleno), strict=False):
-        c.offset_original = e.offset
+    dispuestos, tamanio_total = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos])
+    for c, elemento in zip(campos, (x for x in dispuestos if not x.es_relleno), strict=False):
+        c.offset_original = elemento.offset
     if not campos:
         tamanio_total = 0
 
@@ -244,7 +244,7 @@ def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
         if node.type == "type_definition":
             type_node = node.child_by_field_name("type")
             decl_node = node.child_by_field_name("declarator")
-            nombre = _find_identifier(decl_node) if decl_node else "AnonStruct"
+            nombre = (_find_identifier(decl_node) if decl_node else None) or "AnonStruct"
             if type_node and type_node.type == "struct_specifier":
                 linea = node.start_point.row + 1
                 s_info = analizar_struct_node(type_node, nombre, archivo, linea)
@@ -254,7 +254,7 @@ def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
 
         elif node.type == "struct_specifier" and node.parent and node.parent.type == "declaration":
             name_node = node.child_by_field_name("name")
-            nombre = name_node.text.decode("utf-8", errors="replace") if name_node else "struct_anon"
+            nombre = (name_node.text or b"").decode("utf-8", errors="replace") if name_node else "struct_anon"
             linea = node.start_point.row + 1
             s_info = analizar_struct_node(node, nombre, archivo, linea)
             if s_info:
