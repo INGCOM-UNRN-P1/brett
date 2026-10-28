@@ -48,3 +48,14 @@ def test_struct_anidado_como_campo_calcula_su_tamanio_real(tmp_path):
     campo_inner = next(c for c in structs["S"].campos if c.nombre == "inner")
     assert campo_inner.tamanio == 8
     assert campo_inner.alineacion == 4
+
+
+def test_todos_los_campos_de_una_misma_declaracion(tmp_path):
+    """`char activo, regular;` son dos campos: antes se contaba sólo el primero."""
+    archivo = tmp_path / "a.h"
+    archivo.write_text("typedef struct { char inicial; double promedio; char activo, regular; int *p, q; } a_t;\n",
+                       encoding="utf-8")
+    s = analizar_archivo_c(archivo)[0]
+    assert [(c.nombre, c.tamanio) for c in s.campos] == [
+        ("inicial", 1), ("promedio", 8), ("activo", 1), ("regular", 1), ("p", 8), ("q", 4)]
+    assert s.tamanio_total_bytes == 40

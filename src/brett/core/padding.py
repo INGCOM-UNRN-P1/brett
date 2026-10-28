@@ -142,49 +142,54 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
     tamanio_datos = 0
 
     for f in body_node.children:
-        if f.type == "field_declaration":
-            type_node = f.child_by_field_name("type")
-            decl_node = f.child_by_field_name("declarator")
-            if not decl_node and len(f.children) >= 2:
-                decl_node = f.children[1]
+        if f.type != "field_declaration":
+            continue
+        type_node = f.child_by_field_name("type")
+        # Todos los declaradores: `char activo, regular;` son dos campos (antes se contaba sólo el
+        # primero y el tamaño del struct salía corto).
+        declaradores = list(f.children_by_field_name("declarator"))
+        if not declaradores and len(f.children) >= 2:
+            declaradores = [f.children[1]]
+        if not type_node:
+            continue
+        tipo_base = (type_node.text or b"").decode("utf-8", errors="replace").strip()
+        for decl_node in declaradores:
+            tipo_raw = tipo_base
+            nombre_campo = _find_identifier(decl_node) or "campo"
+            if "*" in (decl_node.text or b"").decode("utf-8", errors="replace"):
+                tipo_raw += " *"
 
-            if type_node and decl_node:
-                tipo_raw = (type_node.text or b"").decode("utf-8", errors="replace").strip()
-                nombre_campo = _find_identifier(decl_node) or "campo"
-                if "*" in (decl_node.text or b"").decode("utf-8", errors="replace"):
-                    tipo_raw += " *"
-
-                if type_node.type == "struct_specifier" and type_node.child_by_field_name("body") is not None:
-                    # Campo que es a su vez un struct (anónimo o nombrado) con
-                    # cuerpo propio: su tamaño real depende de SUS campos, no
-                    # de una tabla de tipos primitivos. Sin este caso, el
-                    # fallback genérico (4, 4) devolvía 4 B para un struct que
-                    # podía ocupar muchos más, corriendo mal todos los offsets
-                    # siguientes.
-                    interno = analizar_struct_node(type_node, f"{nombre_campo}_anidado", archivo, f.start_point.row + 1)
-                    if interno is not None:
-                        tam_elemento = interno.tamanio_total_bytes
-                        align = max((c.alineacion for c in interno.campos), default=1)
-                    else:
-                        tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+            if type_node.type == "struct_specifier" and type_node.child_by_field_name("body") is not None:
+                # Campo que es a su vez un struct (anónimo o nombrado) con
+                # cuerpo propio: su tamaño real depende de SUS campos, no
+                # de una tabla de tipos primitivos. Sin este caso, el
+                # fallback genérico (4, 4) devolvía 4 B para un struct que
+                # podía ocupar muchos más, corriendo mal todos los offsets
+                # siguientes.
+                interno = analizar_struct_node(type_node, f"{nombre_campo}_anidado", archivo, f.start_point.row + 1)
+                if interno is not None and "*" not in tipo_raw:
+                    tam_elemento = interno.tamanio_total_bytes
+                    align = max((c.alineacion for c in interno.campos), default=1)
                 else:
                     tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+            else:
+                tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
 
-                elementos, sufijo_array, dim_no_resuelta = _analizar_dimensiones_array(decl_node)
-                # Un arreglo ocupa N veces su elemento pero conserva la
-                # alineación del elemento (C11 §6.2.8).
-                tam = tam_elemento * elementos
+            elementos, sufijo_array, dim_no_resuelta = _analizar_dimensiones_array(decl_node)
+            # Un arreglo ocupa N veces su elemento pero conserva la
+            # alineación del elemento (C11 §6.2.8).
+            tam = tam_elemento * elementos
 
-                campos.append(CampoStruct(
-                    tipo=tipo_raw,
-                    nombre=nombre_campo,
-                    tamanio=tam,
-                    alineacion=align,
-                    offset_original=0,
-                    sufijo_array=sufijo_array,
-                    dimension_no_resuelta=dim_no_resuelta,
-                ))
-                tamanio_datos += tam
+            campos.append(CampoStruct(
+                tipo=tipo_raw,
+                nombre=nombre_campo,
+                tamanio=tam,
+                alineacion=align,
+                offset_original=0,
+                sufijo_array=sufijo_array,
+                dimension_no_resuelta=dim_no_resuelta,
+            ))
+            tamanio_datos += tam
 
     # Los offsets y el total salen del motor de layout compartido con kane (core/layout.py).
     dispuestos, tamanio_total = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos])
