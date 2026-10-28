@@ -55,7 +55,7 @@ def test_cli_audit_rich_and_empty(tmp_path):
 def test_cli_optimize_empty(tmp_path):
     empty_f = tmp_path / "empty.c"
     empty_f.write_text("int x = 1;\n")
-    res = runner.invoke(app, ["optimize", str(empty_f)])
+    res = runner.invoke(app, ["optimize", str(empty_f), "--codigo"])
     assert res.exit_code == 0
     assert "No se encontraron" in res.stdout
 

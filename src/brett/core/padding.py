@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 import tree_sitter_c as tsc
 from tree_sitter import Language, Parser, Node
 
-from brett.core.layout import disponer
+from brett.core.layout import ABI_POR_OMISION, ABIS, AbiDesconocida, disponer, tamanio_alineacion
 from brett.core.models import CampoStruct, ReportePadding, StructInfo
 from brett.core.preprocesador import enmascarar_bloques_inactivos
 
@@ -24,50 +24,13 @@ def get_c_parser() -> Parser:
     return _PARSER
 
 
-# Tamaños y alineaciones estándar en x86_64
-TIPO_INFO: Dict[str, Tuple[int, int]] = {
-    "char": (1, 1),
-    "bool": (1, 1),
-    "int8_t": (1, 1),
-    "uint8_t": (1, 1),
-    "short": (2, 2),
-    "int16_t": (2, 2),
-    "uint16_t": (2, 2),
-    "int": (4, 4),
-    "float": (4, 4),
-    "int32_t": (4, 4),
-    "uint32_t": (4, 4),
-    "size_t": (8, 8),
-    "long": (8, 8),
-    "double": (8, 8),
-    "int64_t": (8, 8),
-    "uint64_t": (8, 8),
-    "pointer": (8, 8),
-}
+# Tamaños y alineaciones: la tabla por ABI del motor de layout (core/layout.py, Ola 18). TIPO_INFO
+# queda como la de x86_64, el valor por omisión.
+TIPO_INFO: Dict[str, Tuple[int, int]] = ABIS[ABI_POR_OMISION]
 
 
-def _obtener_tamanio_alineacion(tipo: str) -> Tuple[int, int]:
-    tipo_limpio = tipo.strip()
-    if "*" in tipo_limpio:
-        return TIPO_INFO["pointer"]
-
-    # Se resuelve por token exacto, no por substring: "long" es substring de
-    # "long double", así que el matching ingenuo (`if k in tipo`) le asignaba
-    # a `long double` el tamaño de `long` (8 B en vez de 16 B en x86_64).
-    # "long double" es la única combinación que no se puede resolver token a
-    # token, porque tanto "long" como "double" son, cada uno por separado,
-    # una clave válida de TIPO_INFO con el tamaño equivocado.
-    tokens = tipo_limpio.replace(",", " ").split()
-    if "long" in tokens and "double" in tokens:
-        return (16, 16)
-
-    for token in tokens:
-        if token in ("const", "volatile", "unsigned", "signed"):
-            continue
-        if token in TIPO_INFO:
-            return TIPO_INFO[token]
-
-    return (4, 4)  # Fallback estándar
+def _obtener_tamanio_alineacion(tipo: str, abi: str = ABI_POR_OMISION) -> Tuple[int, int]:
+    return tamanio_alineacion(tipo, abi)
 
 
 def _analizar_dimensiones_array(decl_node: Node) -> Tuple[int, str, bool]:
@@ -132,7 +95,8 @@ def orden_optimo_campos(campos: List[CampoStruct]) -> List[CampoStruct]:
     return sorted(campos, key=lambda c: c.alineacion, reverse=True)
 
 
-def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> Optional[StructInfo]:
+def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int,
+                         abi: str = ABI_POR_OMISION) -> Optional[StructInfo]:
     """Analiza los campos de un nodo struct AST, calcula el padding y sugiere el orden óptimo."""
     body_node = node.child_by_field_name("body")
     if not body_node:
@@ -166,14 +130,14 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
                 # fallback genérico (4, 4) devolvía 4 B para un struct que
                 # podía ocupar muchos más, corriendo mal todos los offsets
                 # siguientes.
-                interno = analizar_struct_node(type_node, f"{nombre_campo}_anidado", archivo, f.start_point.row + 1)
+                interno = analizar_struct_node(type_node, f"{nombre_campo}_anidado", archivo, f.start_point.row + 1, abi)
                 if interno is not None and "*" not in tipo_raw:
                     tam_elemento = interno.tamanio_total_bytes
                     align = max((c.alineacion for c in interno.campos), default=1)
                 else:
-                    tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+                    tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw, abi)
             else:
-                tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw)
+                tam_elemento, align = _obtener_tamanio_alineacion(tipo_raw, abi)
 
             elementos, sufijo_array, dim_no_resuelta = _analizar_dimensiones_array(decl_node)
             # Un arreglo ocupa N veces su elemento pero conserva la
@@ -229,7 +193,7 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int) -> 
     )
 
 
-def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
+def analizar_archivo_c(archivo: Path, abi: str = ABI_POR_OMISION) -> List[StructInfo]:
     """Extrae y audita todas las estructuras definidas en un archivo C o H usando Tree-Sitter AST."""
     archivo = Path(archivo)
     if not archivo.is_file():
@@ -252,7 +216,7 @@ def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
             nombre = (_find_identifier(decl_node) if decl_node else None) or "AnonStruct"
             if type_node and type_node.type == "struct_specifier":
                 linea = node.start_point.row + 1
-                s_info = analizar_struct_node(type_node, nombre, archivo, linea)
+                s_info = analizar_struct_node(type_node, nombre, archivo, linea, abi)
                 if s_info:
                     structs.append(s_info)
                 return
@@ -261,7 +225,7 @@ def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
             name_node = node.child_by_field_name("name")
             nombre = (name_node.text or b"").decode("utf-8", errors="replace") if name_node else "struct_anon"
             linea = node.start_point.row + 1
-            s_info = analizar_struct_node(node, nombre, archivo, linea)
+            s_info = analizar_struct_node(node, nombre, archivo, linea, abi)
             if s_info:
                 structs.append(s_info)
             return
@@ -273,22 +237,24 @@ def analizar_archivo_c(archivo: Path) -> List[StructInfo]:
     return structs
 
 
-def auditar_rutas(rutas: List[Path]) -> ReportePadding:
-    """Audita una lista de archivos o directorios."""
+def auditar_rutas(rutas: List[Path], abi: str = ABI_POR_OMISION) -> ReportePadding:
+    """Audita una lista de archivos o directorios con los tamaños de la ABI `abi`."""
+    if abi not in ABIS:
+        raise AbiDesconocida(f"ABI desconocida '{abi}'; usá {', '.join(ABIS)}.")
     todas: List[StructInfo] = []
     for r in rutas:
         p = Path(r)
         if p.is_file() and p.suffix.lower() in (".c", ".h"):
             try:
-                todas.extend(analizar_archivo_c(p))
+                todas.extend(analizar_archivo_c(p, abi))
             except Exception:
                 continue
         elif p.is_dir():
             for sub in p.rglob("*"):
                 if sub.is_file() and sub.suffix.lower() in (".c", ".h"):
                     try:
-                        todas.extend(analizar_archivo_c(sub))
+                        todas.extend(analizar_archivo_c(sub, abi))
                     except Exception:
                         continue
 
-    return ReportePadding(structs=todas)
+    return ReportePadding(structs=todas, abi=abi)

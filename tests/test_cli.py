@@ -39,9 +39,12 @@ def test_cli_optimize(tmp_path):
     } t_dato;
     """)
 
-    res = runner.invoke(app, ["optimize", str(fuente)])
+    res = runner.invoke(app, ["optimize", str(fuente), "--codigo"])
     assert res.exit_code == 0
     assert "Layout Sugerido" in res.stdout
+    # Sin --codigo emite el diff; acá reordenar no ahorra nada (char + long ocupa 16 B igual).
+    res = runner.invoke(app, ["optimize", str(fuente)])
+    assert res.exit_code == 0 and res.stdout == ""
 
 
 def test_cli_doctor():

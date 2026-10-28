@@ -65,15 +65,26 @@ def generar_seccion_markdown(reporte) -> str:
     return "\n".join(lines)
 
 
+def _auditar(rutas: List[Path], abi: str):
+    from brett.core.layout import AbiDesconocida
+
+    try:
+        return auditar_rutas(rutas, abi)
+    except AbiDesconocida as exc:
+        err_console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+
 @app.command("audit")
 def audit_cmd(
     rutas: List[Path] = typer.Argument(..., exists=True, help="Archivos C/H o directorios a auditar."),
     json_output: bool = typer.Option(False, "--json", help="Emitir reporte en JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
     fail_on: Optional[int] = typer.Option(None, "--fail-on", min=1, help="Fallar (código 1) solo si reordenando se ahorrarían N bytes o más en total."),
+    abi: str = typer.Option("x86_64", "--abi", help="Tamaños de los tipos: x86_64, aarch64, riscv64 (LP64, iguales), x86_64-windows (LLP64: long de 4 B) o i386."),
 ) -> None:
     """Audita estructuras en busca de bytes de memoria desperdiciados por desalineación y padding."""
-    reporte = auditar_rutas(rutas)
+    reporte = _auditar(rutas, abi)
 
     if output_md:
         md_text = generar_seccion_markdown(reporte)
@@ -128,9 +139,10 @@ def audit_cmd(
 def report_cmd(
     rutas: List[Path] = typer.Argument(..., exists=True, help="Archivos C/H o directorios a auditar."),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Ruta de destino del archivo Markdown."),
+    abi: str = typer.Option("x86_64", "--abi", help="Tamaños de los tipos: x86_64, aarch64, riscv64, x86_64-windows o i386."),
 ) -> None:
     """Genera directamente la sección de reporte Markdown de BRETT para Dredd."""
-    reporte = auditar_rutas(rutas)
+    reporte = _auditar(rutas, abi)
     md_content = generar_seccion_markdown(reporte)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -143,21 +155,48 @@ def report_cmd(
 
 @app.command("optimize")
 def optimize_cmd(
-    archivo: Path = typer.Argument(..., exists=True, help="Archivo C/H con las estructuras a optimizar."),
+    archivo: Path = typer.Argument(..., exists=True, dir_okay=False, help="Archivo C/H con las estructuras a optimizar."),
+    abi: str = typer.Option("x86_64", "--abi", help="Tamaños de los tipos: x86_64, aarch64, riscv64, x86_64-windows o i386."),
+    aplicar: bool = typer.Option(False, "--aplicar", help="Reescribir el archivo con los campos reordenados en lugar de mostrar el diff."),
+    codigo: bool = typer.Option(False, "--codigo", help="Mostrar cada struct optimizado con sus offsets en lugar del diff."),
 ) -> None:
-    """Genera el código C optimizado reordenando los campos de mayor a menor alineación."""
-    reporte = auditar_rutas([archivo])
-    if not reporte.structs:
-        console.print("[yellow]No se encontraron estructuras para optimizar.[/yellow]")
-        raise typer.Exit(code=0)
+    """Reordena los campos de mayor a menor alineación: emite el diff (`brett optimize x.c | patch -p1`).
 
-    for s in reporte.structs:
-        console.print(f"\n[bold cyan]Estructura: {s.nombre}[/bold cyan] ({s.archivo.name}:{s.linea})")
-        console.print(Panel(
-            Syntax(s.codigo_optimizado, "c", theme="monokai", line_numbers=True),
-            title=f"Layout Sugerido ({s.tamanio_total_bytes} B ➔ {s.tamanio_optimizado_bytes} B)",
-            border_style="green",
-        ))
+    Sólo cambian los structs en los que reordenar ahorra bytes; cada declaración conserva su texto y sus
+    comentarios. Con --aplicar escribe el archivo; con --codigo muestra el struct optimizado con offsets.
+    """
+    from brett.core.layout import AbiDesconocida
+    from brett.core.reordenar import diff, reordenar
+
+    if codigo:
+        reporte = _auditar([archivo], abi)
+        if not reporte.structs:
+            console.print("[yellow]No se encontraron estructuras para optimizar.[/yellow]")
+            raise typer.Exit(code=0)
+        for s in reporte.structs:
+            console.print(f"\n[bold cyan]Estructura: {s.nombre}[/bold cyan] ({s.archivo.name}:{s.linea})")
+            console.print(Panel(
+                Syntax(s.codigo_optimizado, "c", theme="monokai", line_numbers=True),
+                title=f"Layout Sugerido ({s.tamanio_total_bytes} B ➔ {s.tamanio_optimizado_bytes} B)",
+                border_style="green",
+            ))
+        raise typer.Exit(code=0)
+    try:
+        texto, cambiados = diff(archivo, abi)
+    except AbiDesconocida as exc:
+        err_console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+    if not cambiados:
+        err_console.print("[green]Ningún struct ahorra bytes reordenando sus campos.[/green]")
+        raise typer.Exit(code=0)
+    if aplicar:
+        fuente = archivo.read_text(encoding="utf-8", errors="replace")
+        archivo.write_text(reordenar(fuente, archivo, abi)[0], encoding="utf-8")
+    else:
+        print(texto, end="")
+    for s in cambiados:
+        err_console.print(f"{'✓' if aplicar else '·'} {s.nombre} ({archivo.name}:{s.linea}): "
+                          f"{s.tamanio_total_bytes} B → {s.tamanio_optimizado_bytes} B (-{s.bytes_ahorrados} B)")
 
 
 @app.command("doctor")

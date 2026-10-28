@@ -40,8 +40,9 @@ BRETT analiza la disposición en memoria (`Memory Layout`) de tipos de datos com
 # 1. Auditar estructuras en archivos C o cabeceras H
 brett audit src/ main.h
 
-# 2. Generar sugerencias de layout optimizado
-brett optimize tipos.h
+# 2. Reordenar los campos que desperdician memoria: emite el diff (o --aplicar lo escribe)
+brett optimize tipos.h | patch -p1
+brett optimize tipos.h --codigo   # el struct optimizado con sus offsets
 
 # 3. Generar reporte consolidado Markdown
 brett report src/
@@ -51,7 +52,19 @@ brett audit src/ --json
 
 # 5. En el CI de una actividad: fallar solo si reordenando se ahorran 16 bytes o más
 brett audit src/ --fail-on 16
+
+# 6. Con los tamaños de otra ABI (la de Windows, donde long ocupa 4 bytes)
+brett audit src/ --abi x86_64-windows
 ```
+
+`brett optimize` reescribe sólo los structs en los que reordenar ahorra bytes: ordena sus campos de
+mayor a menor alineación conservando el texto de cada declaración y sus comentarios (una declaración
+con varios campos, `char a, b;`, se separa en una por campo) y emite el diff unificado del archivo.
+
+**ABI** (`--abi`): los tamaños y alineaciones de los tipos primitivos salen de una sola tabla,
+`brett.core.layout.ABIS`: `x86_64` (por omisión), `aarch64` y `riscv64` (Linux LP64: coinciden en
+los tipos primitivos), `x86_64-windows` (LLP64 de MinGW/MSYS2: `long` de 4 bytes) e `i386` (ILP32:
+punteros de 4 bytes y `double` alineado a 4). Es la tabla que leen kane y bishop al fijar esta versión de brett.
 
 El cálculo de offsets y relleno (`brett.core.layout.disponer`) es el único del ecosistema: kane lo
 usa para leer los registros de un archivo binario con los mismos offsets que reporta brett.
@@ -70,7 +83,7 @@ usa para leer los registros de un archivo binario con los mismos offsets que rep
 |:--|:--|
 | `brett audit` | Audita estructuras en busca de bytes de memoria desperdiciados por desalineación y padding. |
 | `brett report` | Genera directamente la sección de reporte Markdown de BRETT para Dredd. |
-| `brett optimize` | Genera el código C optimizado reordenando los campos de mayor a menor alineación. |
+| `brett optimize` | Reordena los campos de mayor a menor alineación: emite el diff (`brett optimize x.c \| patch -p1`). |
 | `brett doctor` | Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC). |
 
 Ayuda de cada comando: `brett <comando> -h`.

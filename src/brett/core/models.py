@@ -93,6 +93,7 @@ class StructInfo:
 class ReportePadding:
     """Reporte consolidado de auditoría de padding sobre un conjunto de archivos."""
     structs: List[StructInfo] = field(default_factory=list)
+    abi: str = "x86_64"  # los tamaños y alineaciones de los tipos primitivos (core/layout.ABIS)
 
     @property
     def total_bytes_desperdiciados(self) -> int:
@@ -114,6 +115,7 @@ class ReportePadding:
             # True y daba por aprobado un proyecto con bytes desperdiciados.
             "ok": self.ok,
             "passed": self.ok,
+            "abi": self.abi,
             "total_structs": len(self.structs),
             "total_bytes_desperdiciados": self.total_bytes_desperdiciados,
             "total_bytes_ahorrables": self.total_bytes_ahorrables,
