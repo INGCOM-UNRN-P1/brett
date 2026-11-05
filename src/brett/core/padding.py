@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import tree_sitter_c as tsc
 from tree_sitter import Language, Parser, Node
 
+from brett.core.dwarf_layout import LayoutDwarf, capturar_layouts
 from brett.core.layout import ABI_POR_OMISION, ABIS, AbiDesconocida, disponer, tamanio_alineacion
 from brett.core.models import CampoStruct, ReportePadding, StructInfo
 from brett.core.preprocesador import enmascarar_bloques_inactivos
@@ -164,14 +166,23 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int,
     if not campos:
         tamanio_total = 0
 
+    return _resumir(nombre, archivo, linea, campos, tamanio_total, tamanio_datos)
+
+
+def _resumir(nombre: str, archivo: Path, linea: int, campos: List[CampoStruct], tamanio_total: int,
+             tamanio_datos: int, reordenable: bool = True) -> StructInfo:
+    """El StructInfo de unos campos ya ubicados, con su orden óptimo. Si no es `reordenable`, el
+    óptimo es el orden actual."""
     padding_desperdiciado = tamanio_total - tamanio_datos
 
-    campos_opt = orden_optimo_campos(campos)
+    campos_opt = orden_optimo_campos(campos) if reordenable else list(campos)
     elementos_opt, tamanio_opt = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos_opt])
     for c, e in zip(campos_opt, (e for e in elementos_opt if not e.es_relleno), strict=False):
-        c.offset_optimizado = e.offset
+        c.offset_optimizado = e.offset if reordenable else c.offset_original
     if not campos:
         tamanio_opt = 0
+    if not reordenable:
+        tamanio_opt = tamanio_total
 
     bytes_ahorrados = max(0, tamanio_total - tamanio_opt)
 
@@ -193,6 +204,52 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int,
         bytes_ahorrados=bytes_ahorrados,
         codigo_optimizado=codigo_opt,
     )
+
+
+def _con_layout_medido(info: StructInfo, layout: LayoutDwarf) -> StructInfo:
+    """`info` con los bytes del compilador. Del fuente quedan el tipo y las dimensiones tal como se
+    escribieron (`char nombre[MAX]`), que son los que van en el código sugerido."""
+    del_fuente = {c.nombre: c for c in info.campos}
+    campos: List[CampoStruct] = []
+    for medido in layout.campos:
+        nombre = medido.nombre or "campo"
+        fuente = del_fuente.get(nombre)
+        campos.append(CampoStruct(
+            tipo=fuente.tipo if fuente else medido.tipo,
+            nombre=nombre,
+            tamanio=(medido.bits + 7) // 8 if medido.bits else medido.tamanio,
+            alineacion=max(1, medido.alineacion),
+            offset_original=medido.offset,
+            sufijo_array=fuente.sufijo_array if fuente else medido.sufijo_array,
+            bits=medido.bits,
+        ))
+    bits = sum(c.bits for c in campos)
+    tamanio_datos = sum(c.tamanio for c in campos if not c.bits) + (bits + 7) // 8
+    # El reordenamiento supone el layout natural. Si no explica lo que hizo el compilador (bitfields,
+    # `packed`, `_Alignas`), no se sugiere nada: el ahorro sería inventado.
+    dispuestos, total_natural = disponer([(c.nombre, c.tamanio, c.alineacion) for c in campos])
+    natural = (not bits and (total_natural == layout.tamanio or not campos)
+               and [e.offset for e in dispuestos if not e.es_relleno] == [c.offset_original for c in campos])
+    medido_info = _resumir(info.nombre, info.archivo, info.linea, campos, layout.tamanio, tamanio_datos, natural)
+    return replace(medido_info, origen="dwarf")
+
+
+def refinar_con_dwarf(structs: List[StructInfo], archivo: Path, abi: str = ABI_POR_OMISION) -> List[StructInfo]:
+    """Los structs de `archivo` con el layout que midió el compilador; el que no se pudo medir queda
+    con la estimación del fuente y el motivo."""
+    if not structs:
+        return structs
+    layouts, motivo = capturar_layouts(archivo, [s.nombre for s in structs], abi)
+    refinados: List[StructInfo] = []
+    for s in structs:
+        layout = layouts.get(s.nombre)
+        # Sin ningún campo en común, gdb encontró otro struct con ese nombre (uno local tapado por un
+        # global, por ejemplo).
+        if layout and {c.nombre for c in s.campos} & {c.nombre or "campo" for c in layout.campos}:
+            refinados.append(_con_layout_medido(s, layout))
+        else:
+            refinados.append(replace(s, motivo_estimado=motivo))
+    return refinados
 
 
 # `struct s { … } v;` y, dentro de una función, `struct s { … };` son una declaración. El mismo
@@ -241,7 +298,7 @@ def analizar_archivo_c(archivo: Path, abi: str = ABI_POR_OMISION) -> List[Struct
             _traverse(child)
 
     _traverse(tree.root_node)
-    return structs
+    return refinar_con_dwarf(structs, archivo, abi)
 
 
 def auditar_rutas(rutas: List[Path], abi: str = ABI_POR_OMISION) -> ReportePadding:

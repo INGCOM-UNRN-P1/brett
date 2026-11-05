@@ -23,6 +23,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
+      # brett mide los tamaños con el compilador: sin gdb y pahole esas pruebas se saltean.
+      - name: Instalar gdb y pahole
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdb dwarves
+
       - name: Sincronizar dependencias
         run: uv sync --all-extras
 

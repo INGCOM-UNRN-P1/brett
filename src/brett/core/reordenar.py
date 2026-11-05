@@ -17,7 +17,8 @@ from tree_sitter import Node
 
 from brett.core.layout import ABI_POR_OMISION
 from brett.core.models import StructInfo
-from brett.core.padding import _PADRES_DE_STRUCT, _find_identifier, analizar_struct_node, get_c_parser, orden_optimo_campos
+from brett.core.padding import (_PADRES_DE_STRUCT, _find_identifier, analizar_struct_node, get_c_parser, orden_optimo_campos,
+                                refinar_con_dwarf)
 from brett.core.preprocesador import enmascarar_bloques_inactivos
 
 
@@ -83,8 +84,12 @@ def reordenar(fuente: str, archivo: Path = Path("archivo.c"),
     raiz = get_c_parser().parse(datos).root_node
     reemplazos: List[Tuple[int, int, str]] = []
     cambiados: List[StructInfo] = []
-    for struct, nombre, linea in _structs(raiz):
-        info = analizar_struct_node(struct, nombre, archivo, linea, abi)
+    nodos = [(struct, analizar_struct_node(struct, nombre, archivo, linea, abi)) for struct, nombre, linea in _structs(raiz)]
+    infos = [info for _, info in nodos if info is not None]
+    # El ahorro se decide con los tamaños reales, como en `brett audit`.
+    medidos = iter(refinar_con_dwarf(infos, archivo, abi) if Path(archivo).is_file() else infos)
+    for struct, estimado in nodos:
+        info = next(medidos) if estimado is not None else None
         cuerpo = struct.child_by_field_name("body")
         if info is None or cuerpo is None or info.bytes_ahorrados <= 0:
             continue

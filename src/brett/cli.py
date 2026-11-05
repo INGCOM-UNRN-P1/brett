@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import typer
 from yutani.cli import crear_app
@@ -62,7 +63,14 @@ def generar_seccion_markdown(reporte) -> str:
             loc_limpio = f"{s.archivo.name}:{s.linea}".replace("|", "&#124;")
             lines.append(f"| `{nom_limpio}` | `{loc_limpio}` | {s.tamanio_total_bytes} B | {s.tamanio_datos_utiles_bytes} B | {s.bytes_padding_desperdiciados} B | {s.tamanio_optimizado_bytes} B | {ahorro_str} |")
         lines.append("")
+    for motivo, cantidad in _motivos_estimados(reporte).items():
+        lines.append(f"> [!NOTE]\n> **Tamaños estimados en {cantidad} struct(s):** {motivo}\n")
     return "\n".join(lines)
+
+
+def _motivos_estimados(reporte) -> Dict[str, int]:
+    """Por qué algunos tamaños no los midió el compilador, y en cuántos structs."""
+    return dict(Counter(s.motivo_estimado for s in reporte.structs if s.origen != "dwarf"))
 
 
 def _auditar(rutas: List[Path], abi: str):
@@ -132,6 +140,8 @@ def audit_cmd(
         title="Resumen de Padding",
         border_style=color,
     ))
+    for motivo, cantidad in _motivos_estimados(reporte).items():
+        err_console.print(f"[yellow]⚠ Tamaños estimados en {cantidad} struct(s):[/yellow] {motivo}")
     raise typer.Exit(code=_codigo_salida(reporte, fail_on))
 
 
@@ -203,7 +213,7 @@ def optimize_cmd(
 def doctor_cmd(
     json_output: bool = typer.Option(False, "--json", help="Emitir diagnóstico en formato JSON estructurado."),
 ) -> None:
-    """Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC)."""
+    """Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC, GDB, pahole)."""
     import shutil
     import sys
     diagnostico = []
@@ -231,12 +241,30 @@ def doctor_cmd(
         "detalle": ts_det,
     })
 
+    # Sin estas herramientas brett funciona igual, pero estima los tamaños a partir del fuente.
     gcc_path = shutil.which("gcc")
     diagnostico.append({
         "componente": "Compilador GCC",
         "estado": "OK" if gcc_path else "ADVERTENCIA",
         "requerido": False,
-        "detalle": gcc_path or "No encontrado (opcional para verificación ABI nativa)",
+        "detalle": gcc_path or "No encontrado: los tamaños serán estimados. Instalá gcc para medirlos.",
+    })
+    gdb_path = shutil.which("gdb")
+    pahole_path = shutil.which("pahole")
+    diagnostico.append({
+        "componente": "GDB (mide tamaños y alineación)",
+        "estado": "OK" if gdb_path else "ADVERTENCIA",
+        "requerido": False,
+        "detalle": gdb_path or ("No encontrado: se usa pahole, que acota la alineación de typedefs y structs. "
+                                "Instalá gdb para medirla." if pahole_path else
+                                "No encontrado: los tamaños serán estimados. Instalá gdb para medirlos."),
+    })
+    diagnostico.append({
+        "componente": "pahole (respaldo de GDB)",
+        "estado": "OK" if pahole_path or gdb_path else "ADVERTENCIA",
+        "requerido": False,
+        "detalle": pahole_path or ("No hace falta: gdb ya mide los tamaños." if gdb_path else
+                                   "No encontrado. Se instala con el paquete dwarves, o instalá gdb."),
     })
 
     todo_ok = py_ok and ts_ok

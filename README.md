@@ -2,7 +2,7 @@
 
 > 📖 **Manual de Usuario:** Para una guía exhaustiva de comandos, banderas, arquitectura y ejemplos, consultá el [Manual de Uso](MANUAL.md).
 
-BRETT analiza la disposición en memoria (`Memory Layout`) de tipos de datos compuestos (`typedef struct`) en C, calcula los bytes de relleno (`padding`) desperdiciados por desalineación de campos y genera sugerencias automáticas de reordenamiento para minimizar el tamaño de las estructuras.
+BRETT analiza la disposición en memoria (`Memory Layout`) de tipos de datos compuestos (`struct`, con o sin `typedef`) en C, mide con el compilador los bytes de relleno (`padding`) desperdiciados por desalineación de campos y genera sugerencias automáticas de reordenamiento para minimizar el tamaño de las estructuras.
 
 ---
 
@@ -84,7 +84,7 @@ usa para leer los registros de un archivo binario con los mismos offsets que rep
 | `brett audit` | Audita estructuras en busca de bytes de memoria desperdiciados por desalineación y padding. |
 | `brett report` | Genera directamente la sección de reporte Markdown de BRETT para Dredd. |
 | `brett optimize` | Reordena los campos de mayor a menor alineación: emite el diff (`brett optimize x.c \| patch -p1`). |
-| `brett doctor` | Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC). |
+| `brett doctor` | Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC, GDB, pahole). |
 
 Ayuda de cada comando: `brett <comando> -h`.
 

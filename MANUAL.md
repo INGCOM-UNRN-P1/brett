@@ -10,7 +10,7 @@
 `brett` forma parte del ecosistema de herramientas de la cátedra de Programación 1 (UNRN). Su objetivo central es resolver de forma modular, determinista y automatizada las tareas asociadas a su dominio específico dentro del ciclo de desarrollo, evaluación y aprendizaje de software en C.
 
 ### Alcance Funcional (Qué cubre)
-- Auditoría estática y cálculo del layout de memoria de `typedef struct` en C.
+- Medición del layout de memoria de los `struct` de C (con o sin `typedef`) con el propio compilador.
 - Determinación de offsets de cada campo, tamaño total del tipo y requerimientos de alineación (`alignof`).
 - Identificación y cuantificación de bytes de padding desperdiciados por desalineación de campos.
 - Generación de propuestas de reordenamiento óptimo de campos para minimizar el consumo de memoria.
@@ -47,6 +47,19 @@ Ejecutá el comando `doctor` para constatar que todas las dependencias y binario
 brett doctor
 ```
 
+### Cómo se miden los tamaños
+
+brett compila cada archivo con structs en una carpeta temporal y lee el layout del DWARF con la API Python de gdb: `int v[MAX]`, typedefs de otros archivos, `union`, bitfields y `packed` dan los mismos bytes que `sizeof`. No hace falta ningún archivo de configuración y al lado del fuente no queda nada.
+
+Si no se puede medir, brett estima a partir del fuente y lo dice: `audit` muestra el motivo, y en `--json` cada struct trae `origen` (`dwarf` o `estimado`) y `motivo_estimado`. Pasa cuando:
+
+- El archivo todavía no compila.
+- Faltan gcc, o gdb y pahole juntos (`brett doctor` indica qué instalar). Con pahole sin gdb, tamaños y offsets son exactos, pero la alineación de typedefs y structs se acota.
+- La `--abi` pedida no es la del gcc del sistema. `i386` en x86_64 se compila con `-m32` si gcc tiene el soporte de 32 bits; el resto usa la tabla de esa ABI.
+- El struct está dentro de una función o no tiene nombre.
+
+brett no sugiere reordenar un struct con bitfields, `packed` o `_Alignas`: el cálculo del orden óptimo supone el layout natural.
+
 ---
 
 ## 3. Guía Integral de Comandos (CLI)
@@ -56,7 +69,7 @@ brett doctor
 | [`brett audit`](#audit) | Audita estructuras en busca de bytes de memoria desperdiciados por desalineación y padding. |
 | [`brett report`](#report) | Genera directamente la sección de reporte Markdown de BRETT para Dredd. |
 | [`brett optimize`](#optimize) | Genera el código C optimizado reordenando los campos de mayor a menor alineación. |
-| [`brett doctor`](#doctor) | Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC). |
+| [`brett doctor`](#doctor) | Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC, GDB, pahole). |
 
 ### `brett audit`
 
@@ -113,7 +126,7 @@ brett optimize <archivo>
 
 ### `brett doctor`
 
-Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC).
+Verifica el estado del entorno de auditoría de memoria y padding BRETT (Tree-Sitter C, Python, GCC, GDB, pahole).
 
 #### Opciones y Banderas
 | Opción / Banderas | Tipo | Por Defecto | Descripción |

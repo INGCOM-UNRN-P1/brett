@@ -23,11 +23,14 @@ class CampoStruct:
     # True cuando alguna dimensión no es un literal entero (p. ej. `int v[MAX]`)
     # y por lo tanto el tamaño del campo no se puede calcular con exactitud.
     dimension_no_resuelta: bool = False
+    # Ancho de un bitfield medido por el compilador; 0 en cualquier otro campo.
+    bits: int = 0
 
     @property
     def declaracion(self) -> str:
         """Declaración del campo tal como debe emitirse en C."""
-        return f"{self.tipo} {self.nombre}{self.sufijo_array}"
+        ancho = f" : {self.bits}" if self.bits else ""
+        return f"{self.tipo} {self.nombre}{self.sufijo_array}{ancho}"
 
 
 @dataclass
@@ -43,6 +46,9 @@ class StructInfo:
     tamanio_optimizado_bytes: int = 0
     bytes_ahorrados: int = 0
     codigo_optimizado: str = ""
+    # "dwarf": lo midió el compilador. "estimado": salió del fuente, y `motivo_estimado` dice por qué.
+    origen: str = "estimado"
+    motivo_estimado: str = ""
 
     @property
     def tiene_dimensiones_no_resueltas(self) -> bool:
@@ -75,6 +81,8 @@ class StructInfo:
             "bytes_ahorrados": self.bytes_ahorrados,
             "codigo_optimizado": self.codigo_optimizado,
             "dimensiones_no_resueltas": self.tiene_dimensiones_no_resueltas,
+            "origen": self.origen,
+            "motivo_estimado": self.motivo_estimado,
             # Claves del contrato de satélite de Ripley (`normalize_finding`), que
             # sin ellas degrada el hallazgo a un mensaje vacío. `wasted_padding_bytes`
             # lleva el ahorro reordenable —no el padding total— porque es lo que
