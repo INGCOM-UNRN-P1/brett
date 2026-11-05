@@ -109,3 +109,12 @@ def test_aplicar_reescribe_el_archivo(tmp_path):
     assert runner.invoke(app, ["optimize", str(fuente), "--aplicar"]).exit_code == 0
     assert fuente.read_text(encoding="utf-8") == reordenar(ALUMNO)[0]
     assert diff(fuente)[1] == []  # ya no queda nada que ahorrar
+
+
+def test_el_miembro_flexible_queda_ultimo_al_reordenar():
+    from brett.core.reordenar import reordenar
+
+    nuevo, cambiados = reordenar("struct s {\n    char a;\n    long b;\n    char c;\n    int v[];\n};\n")
+
+    assert cambiados
+    assert nuevo.index("int v[]") > nuevo.index("char c")

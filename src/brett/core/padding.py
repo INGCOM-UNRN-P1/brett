@@ -92,7 +92,9 @@ def _find_identifier(node: Node) -> Optional[str]:
 
 
 def orden_optimo_campos(campos: List[CampoStruct]) -> List[CampoStruct]:
-    return sorted(campos, key=lambda c: c.alineacion, reverse=True)
+    """De mayor a menor alineación, estable entre iguales. Un miembro flexible (`int v[];`) sigue
+    siendo el último: en otro lugar el struct no compila (C11 §6.7.2.1)."""
+    return sorted(campos, key=lambda c: (c.sufijo_array.startswith("[]"), -c.alineacion))
 
 
 def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int,
