@@ -17,7 +17,7 @@ from tree_sitter import Node
 
 from brett.core.layout import ABI_POR_OMISION
 from brett.core.models import StructInfo
-from brett.core.padding import _find_identifier, analizar_struct_node, get_c_parser, orden_optimo_campos
+from brett.core.padding import _PADRES_DE_STRUCT, _find_identifier, analizar_struct_node, get_c_parser, orden_optimo_campos
 from brett.core.preprocesador import enmascarar_bloques_inactivos
 
 
@@ -34,7 +34,7 @@ def _structs(raiz: Node):
             if tipo is not None and tipo.type == "struct_specifier":
                 yield tipo, (_find_identifier(decl) if decl else None) or "AnonStruct", node.start_point.row + 1
                 return
-        elif node.type == "struct_specifier" and node.parent is not None and node.parent.type == "declaration":
+        elif node.type == "struct_specifier" and node.parent is not None and node.parent.type in _PADRES_DE_STRUCT:
             nombre = node.child_by_field_name("name")
             yield node, (nombre.text or b"").decode("utf-8", errors="replace") if nombre else "struct_anon", \
                 node.start_point.row + 1

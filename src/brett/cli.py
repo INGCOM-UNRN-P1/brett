@@ -98,7 +98,7 @@ def audit_cmd(
         raise typer.Exit(code=_codigo_salida(reporte, fail_on))
 
     if not reporte.structs:
-        console.print("[green]No se encontraron declaraciones de 'typedef struct' en los archivos analizados.[/green]")
+        console.print("[green]No se encontraron declaraciones de 'struct' en los archivos analizados.[/green]")
         raise typer.Exit(code=0)
 
     tabla = Table(title=f"Auditoría de Padding de Estructuras ({len(reporte.structs)} structs)")

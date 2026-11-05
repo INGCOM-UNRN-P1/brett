@@ -195,6 +195,11 @@ def analizar_struct_node(node: Node, nombre: str, archivo: Path, linea: int,
     )
 
 
+# `struct s { … } v;` y, dentro de una función, `struct s { … };` son una declaración. El mismo
+# `struct s { … };` a nivel de archivo cuelga directamente de la raíz del árbol.
+_PADRES_DE_STRUCT = ("declaration", "translation_unit")
+
+
 def analizar_archivo_c(archivo: Path, abi: str = ABI_POR_OMISION) -> List[StructInfo]:
     """Extrae y audita todas las estructuras definidas en un archivo C o H usando Tree-Sitter AST."""
     archivo = Path(archivo)
@@ -223,7 +228,7 @@ def analizar_archivo_c(archivo: Path, abi: str = ABI_POR_OMISION) -> List[Struct
                     structs.append(s_info)
                 return
 
-        elif node.type == "struct_specifier" and node.parent and node.parent.type == "declaration":
+        elif node.type == "struct_specifier" and node.parent and node.parent.type in _PADRES_DE_STRUCT:
             name_node = node.child_by_field_name("name")
             nombre = (name_node.text or b"").decode("utf-8", errors="replace") if name_node else "struct_anon"
             linea = node.start_point.row + 1
