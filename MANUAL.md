@@ -85,6 +85,8 @@ Audita estructuras en busca de bytes de memoria desperdiciados por desalineació
 | :--- | :--- | :--- | :--- |
 | `--json` | `bool` | `False` | Emitir reporte en JSON. |
 | `--md`, `--output-md`, `-o` | `Optional[Path]` | `None` | Generar sección de reporte en formato Markdown para fusión en Dredd. |
+| `--fail-on` | `Optional[int]` | `None` | Fallar (código 1) solo si reordenando se ahorrarían `N` bytes o más en total. |
+| `--abi` | `str` | `"x86_64"` | ABI para tamaños y alineaciones (`x86_64`, `aarch64`, `riscv64`, `x86_64-windows`, `i386`). |
 
 #### Ejemplo de Invocación
 ```bash
@@ -168,8 +170,8 @@ Este encabezado garantiza la agregación determinista de los hallazgos en la rú
 ### Códigos de Retorno (`exit code`)
 | Código | Significado |
 | :---: | :--- |
-| `0` | Ejecución exitosa sin hallazgos críticos ni errores de sintaxis. |
-| `1` | Hallazgos pedagógicos detectados, infracción de reglas o advertencias activas. |
+| `0` | Ejecución exitosa sin padding reordenable (o por debajo del umbral `--fail-on N`). |
+| `1` | Hay padding reordenable (ahorro > 0 B) o se alcanzó `--fail-on N` bytes ahorrables. |
 | `2` | Error de sintaxis en argumentos CLI o archivo fuente no encontrado. |
 | `>2` | Error no recuperable del sistema, fallo de memoria o excepción interna. |
 
