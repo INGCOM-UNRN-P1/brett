@@ -35,7 +35,7 @@ dependencies = [
     "tree-sitter>=0.25.0,<0.26",
     "tree-sitter-c>=0.24.0",
     # Núcleo común del ecosistema (N-ECO-14): contrato de línea de comandos y textos en español.
-    "yutani @ git+https://github.com/INGCOM-UNRN/yutani@cf49348fae40d264006fe07dee2cc9e88dd9c934",
+    "yutani @ git+https://github.com/INGCOM-UNRN/yutani@6e42d7ab8b89a1084381f8aea0999a498a844f6c",
 ]
 
 [project.urls]
